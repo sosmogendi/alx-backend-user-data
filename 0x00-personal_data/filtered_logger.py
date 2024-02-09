@@ -1,16 +1,18 @@
 import logging
 import re
+import mysql.connector
+from typing import List
 
 
-class RedactingFormatter(logging.Formatter):
-    """ Redacting Formatter class """
+class CustomFormatter(logging.Formatter):
+    """ Custom Formatter class """
 
-    def __init__(self, fields: list):
+    def __init__(self, fields: List[str]):
         """
-        Initialize RedactingFormatter with a list of fields to redact.
+        Initialize CustomFormatter with a list of fields to redact.
 
         Args:
-            fields (list): List of strings representing fields to redact.
+            fields (List[str]): List of strings representing fields to redact.
         """
         super().__init__("[HOLBERTON] %(name)s %(levelname)s %(asctime)-15s: %(message)s")
         self.fields = fields
@@ -33,8 +35,60 @@ class RedactingFormatter(logging.Formatter):
         return super().format(record)
 
 
-if __name__ == "__main__":
-    message = "name=Bob;email=bob@dylan.com;ssn=000-123-0000;password=bobby2019;"
-    log_record = logging.LogRecord("my_logger", logging.INFO, None, None, message, None, None)
-    formatter = RedactingFormatter(fields=("email", "ssn", "password"))
-    print(formatter.format(log_record))
+def filter_data(fields: List[str], redaction: str, message: str, separator: str) -> str:
+    """ Returns a log message obfuscated """
+    for field in fields:
+        message = re.sub(f'{field}=.*?{separator}',
+                         f'{field}={redaction}{separator}', message)
+    return message
+
+
+def initialize_logger() -> logging.Logger:
+    """ Returns a Logger Object """
+    logger = logging.getLogger("user_data")
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
+
+    stream_handler = logging.StreamHandler()
+    stream_handler.setFormatter(CustomFormatter(list(PII_FIELDS)))
+    logger.addHandler(stream_handler)
+
+    return logger
+
+
+def initialize_database_connection() -> mysql.connector.connection.MySQLConnection:
+    """ Returns a connector to a MySQL database """
+    username = environ.get("PERSONAL_DATA_DB_USERNAME", "root")
+    password = environ.get("PERSONAL_DATA_DB_PASSWORD", "")
+    host = environ.get("PERSONAL_DATA_DB_HOST", "localhost")
+    db_name = environ.get("PERSONAL_DATA_DB_NAME")
+
+    connection = mysql.connector.connection.MySQLConnection(user=username,
+                                                            password=password,
+                                                            host=host,
+                                                            database=db_name)
+    return connection
+
+
+def main():
+    """
+    Obtain a database connection using initialize_database_connection and retrieves all rows
+    in the users table and display each row under a filtered format
+    """
+    connection = initialize_database_connection()
+    cursor = connection.cursor()
+    cursor.execute("SELECT * FROM users;")
+    field_names = [i[0] for i in cursor.description]
+
+    logger = initialize_logger()
+
+    for row in cursor:
+        str_row = ''.join(f'{f}={str(r)}; ' for r, f in zip(row, field_names))
+        logger.info(str_row.strip())
+
+    cursor.close()
+    connection.close()
+
+
+if __name__ == '__main__':
+    main()
