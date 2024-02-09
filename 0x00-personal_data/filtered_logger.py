@@ -2,19 +2,19 @@
 """
 Module for handling Personal Data
 """
-from typing import List
 import re
 import logging
 from os import environ
 import mysql.connector
+from typing import List
 
 
 PII_FIELDS = ("name", "email", "phone", "ssn", "password")
 
 
-def obfuscate_fields(fields: List[str], redaction: str,
-                     message: str, separator: str) -> str:
-    """ Returns a log message with specified fields obfuscated """
+def filter_datum(fields: List[str], redaction: str,
+                 message: str, separator: str) -> str:
+    """ Returns a log message obfuscated """
     for field in fields:
         message = re.sub(f'{field}=.*?{separator}',
                          f'{field}={redaction}{separator}', message)
@@ -80,9 +80,9 @@ class RedactingFormatter(logging.Formatter):
         self.fields = fields
 
     def format(self, record: logging.LogRecord) -> str:
-        """ Filters values in incoming log records using obfuscate_fields """
-        record.msg = obfuscate_fields(self.fields, self.REDACTION,
-                                      record.getMessage(), self.SEPARATOR)
+        """ Filters values in incoming log records using filter_datum """
+        record.msg = filter_datum(self.fields, self.REDACTION,
+                                  record.getMessage(), self.SEPARATOR)
         return super(RedactingFormatter, self).format(record)
 
 
