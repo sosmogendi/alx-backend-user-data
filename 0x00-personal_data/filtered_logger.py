@@ -2,15 +2,24 @@
 """
 Module for handling Personal Data
 """
-import mysql.connector
+import re
+import logging
 from os import environ
+import mysql.connector
+from typing import List
 
-def filter_datum(fields, redaction, message, separator):
+
+PII_FIELDS = ("name", "email", "phone", "ssn", "password")
+
+
+def filter_datum(fields: List[str], redaction: str,
+                 message: str, separator: str) -> str:
     """ Returns a log message obfuscated """
     for field in fields:
         message = re.sub(f'{field}=.*?{separator}',
                          f'{field}={redaction}{separator}', message)
     return message
+
 
 def get_logger() -> logging.Logger:
     """ Returns a Logger Object """
@@ -24,26 +33,28 @@ def get_logger() -> logging.Logger:
 
     return logger
 
-def get_db() -> mysql.connector.connection.MySQLConnection:
+
+def get_database_connection() -> mysql.connector.connection.MySQLConnection:
     """ Returns a connector to a MySQL database """
     username = environ.get("PERSONAL_DATA_DB_USERNAME", "root")
     password = environ.get("PERSONAL_DATA_DB_PASSWORD", "")
     host = environ.get("PERSONAL_DATA_DB_HOST", "localhost")
-    db_name = environ.get("PERSONAL_DATA_DB_NAME")
+    database_name = environ.get("PERSONAL_DATA_DB_NAME")
 
-    cnx = mysql.connector.connect(user=username,
-                                  password=password,
-                                  host=host,
-                                  database=db_name)
-    return cnx
+    connection = mysql.connector.connection.MySQLConnection(user=username,
+                                                            password=password,
+                                                            host=host,
+                                                            database=database_name)
+    return connection
+
 
 def main():
     """
-    Obtain a database connection using get_db
+    Obtain a database connection using get_database_connection
     and retrieves all rows in the users table and display each row under a filtered format
     """
-    db = get_db()
-    cursor = db.cursor()
+    database_connection = get_database_connection()
+    cursor = database_connection.cursor()
     cursor.execute("SELECT * FROM users;")
     field_names = [i[0] for i in cursor.description]
 
@@ -54,7 +65,7 @@ def main():
         logger.info(str_row.strip())
 
     cursor.close()
-    db.close()
+    database_connection.close()
 
 
 class RedactingFormatter(logging.Formatter):
@@ -64,7 +75,7 @@ class RedactingFormatter(logging.Formatter):
     FORMAT = "[HOLBERTON] %(name)s %(levelname)s %(asctime)-15s: %(message)s"
     SEPARATOR = ";"
 
-    def __init__(self, fields):
+    def __init__(self, fields: List[str]):
         super(RedactingFormatter, self).__init__(self.FORMAT)
         self.fields = fields
 
